@@ -1,0 +1,44 @@
+name: Daily Stock Scanner
+
+on:
+  schedule:
+    # Run at 2:30 PM UTC (9:30 AM ET / US Market Open)
+    # Monday-Friday only
+    - cron: '30 14 * * 1-5'
+  
+  # Also allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run stock scanner
+        env:
+          FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
+          MARKETSTACK_KEY: ${{ secrets.MARKETSTACK_KEY }}
+        run: |
+          python -m src.main --tickers data/tickers_1000.csv
+      
+      - name: Commit and push results
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data/output/scan_results_latest.csv
+          git commit -m "Daily scan: $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+          git push
