@@ -1,0 +1,34 @@
+# Provider Configuration for Stock Scanner
+# October 25, 2025
+
+marketstack:
+  enabled: true
+  priority: 1
+  base_url: "http://api.marketstack.com/v1/eod"
+  batch_size: 100
+  calls_per_month: 1000
+  calls_per_day: 33
+
+finnhub:
+  enabled: true
+  priority: 2
+  base_url: "https://finnhub.io/api/v1"
+  calls_per_minute: 60
+
+twelvedata:
+  enabled: true
+  priority: 3
+  base_url: "https://api.twelvedata.com"
+  batch_size: 120
+  calls_per_day: 800
+
+scanner:
+  output_format: "csv"
+  validate_data: true
+  deduplicate: true
+  timeout: 30
+  retry_attempts: 3
+
+logging:
+  level: "INFO"
+  file_format: "logs/scanner_{timestamp}.log"
