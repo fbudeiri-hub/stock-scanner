@@ -1,18 +1,17 @@
 """
-Optimized Finnhub API provider with rate limiting
+Polygon.io API provider with rate limiting
 """
 
 from typing import List, Dict, Any
 from .base import BaseProvider
 from utils.rate_limiter_advanced import AdvancedRateLimiter
-from datetime import datetime
 
-class FinnhubProvider(BaseProvider):
-    """Finnhub with rate limit compliance (60/min)"""
+class PolygonProvider(BaseProvider):
+    """Polygon with rate limit compliance (500/day)"""
     
     def __init__(self, api_key: str):
-        super().__init__(api_key, "Finnhub")
-        self.base_url = "https://finnhub.io/api/v1/quote"
+        super().__init__(api_key, "Polygon")
+        self.base_url = "https://api.polygon.io/v1/open-close"
         self.rate_limiter = AdvancedRateLimiter()
         
     def fetch_data(self, symbols: List[str]) -> Dict[str, Any]:
@@ -21,46 +20,44 @@ class FinnhubProvider(BaseProvider):
             return {'data': []}
         
         all_data = []
-        successful = 0
-        
-        print(f"[INFO] {self.name}: Processing {len(symbols)} symbols")
         
         for idx, symbol in enumerate(symbols):
-            # Wait until we can make a call
             if not self.rate_limiter.wait_until_ready(self.name):
-                print(f"[WARNING] {self.name}: Rate limit max wait. Stopping at {idx}/{len(symbols)}")
+                print(f"[WARNING] {self.name}: Rate limit exceeded at {idx}/{len(symbols)}")
                 break
             
-            params = {'symbol': symbol, 'token': self.api_key}
+            params = {
+                'stockticker': symbol,
+                'adjusted': 'true',
+                'apiKey': self.api_key
+            }
+            
             response = self._make_request(self.base_url, params)
             
             if response and 'c' in response:
-                all_data.append({'symbol': symbol, 'quote': response})
-                successful += 1
+                all_data.append({'symbol': symbol, 'data': response})
                 self.rate_limiter.record_call(self.name)
             
-            # Progress every 10
             if (idx + 1) % 10 == 0:
                 stats = self.rate_limiter.get_stats(self.name)
                 print(f"[INFO] {self.name}: {idx + 1}/{len(symbols)} | {stats}")
         
-        return {'data': all_data, 'provider': 'finnhub'}
+        return {'data': all_data, 'provider': 'polygon'}
     
     def normalize_data(self, raw_data: Dict) -> List[Dict]:
-        """Normalize data"""
+        """Normalize Polygon data"""
         normalized = []
-        today = datetime.now().strftime('%Y-%m-%d')
         for item in raw_data.get('data', []):
-            quote = item.get('quote', {})
+            data = item.get('data', {})
             normalized.append({
                 'symbol': item.get('symbol'),
-                'date': today,
-                'open': quote.get('o'),
-                'high': quote.get('h'),
-                'low': quote.get('l'),
-                'close': quote.get('c'),
-                'volume': quote.get('v'),
-                'provider': 'finnhub'
+                'date': item.get('from', ''),
+                'open': data.get('o'),
+                'high': data.get('h'),
+                'low': data.get('l'),
+                'close': data.get('c'),
+                'volume': data.get('v'),
+                'provider': 'polygon'
             })
         return normalized
 

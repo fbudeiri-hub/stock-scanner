@@ -1,5 +1,5 @@
 """
-Optimized Twelve Data API provider with rate limiting
+FMP API provider with rate limiting
 """
 
 from typing import List, Dict, Any
@@ -7,12 +7,12 @@ from .base import BaseProvider
 from utils.rate_limiter_advanced import AdvancedRateLimiter
 import time
 
-class TwelvedataProvider(BaseProvider):
-    """Twelve Data with rate limit compliance (800/day)"""
+class FMPProvider(BaseProvider):
+    """FMP with rate limit compliance (250/day)"""
     
     def __init__(self, api_key: str):
-        super().__init__(api_key, "Twelve Data")
-        self.base_url = "https://api.twelvedata.com/quote"
+        super().__init__(api_key, "FMP")
+        self.base_url = "https://financialmodelingprep.com/api/v3/quote"
         self.batch_size = 50
         self.rate_limiter = AdvancedRateLimiter()
         
@@ -33,34 +33,30 @@ class TwelvedataProvider(BaseProvider):
             symbol_str = ','.join(batch)
             
             print(f"[INFO] {self.name}: Batch {batch_num + 1}/{total_batches}")
-            params = {'symbol': symbol_str, 'apikey': self.api_key, 'format': 'json'}
+            params = {'symbol': symbol_str, 'apikey': self.api_key}
             response = self._make_request(self.base_url, params)
             
-            if response:
-                if 'data' in response:
-                    all_data.extend(response['data'])
-                else:
-                    all_data.append(response)
+            if response and isinstance(response, list):
+                all_data.extend(response)
                 self.rate_limiter.record_call(self.name)
             
             if batch_num < total_batches - 1:
                 time.sleep(0.5)
         
-        return {'data': all_data, 'provider': 'twelvedata'}
+        return {'data': all_data, 'provider': 'fmp'}
     
     def normalize_data(self, raw_data: Dict) -> List[Dict]:
-        """Normalize data"""
+        """Normalize FMP data"""
         normalized = []
         for item in raw_data.get('data', []):
-            if isinstance(item, dict):
-                normalized.append({
-                    'symbol': item.get('symbol'),
-                    'date': item.get('datetime', ''),
-                    'open': item.get('open'),
-                    'high': item.get('high'),
-                    'low': item.get('low'),
-                    'close': item.get('close'),
-                    'volume': item.get('volume'),
-                    'provider': 'twelvedata'
-                })
+            normalized.append({
+                'symbol': item.get('symbol'),
+                'date': item.get('date', ''),
+                'open': item.get('open'),
+                'high': item.get('dayHigh'),
+                'low': item.get('dayLow'),
+                'close': item.get('price'),
+                'volume': item.get('volume'),
+                'provider': 'fmp'
+            })
         return normalized
