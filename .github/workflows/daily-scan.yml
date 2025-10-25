@@ -2,11 +2,7 @@ name: Daily Stock Scanner
 
 on:
   schedule:
-    # Run at 2:30 PM UTC (9:30 AM ET / US Market Open)
-    # Monday-Friday only
     - cron: '30 14 * * 1-5'
-  
-  # Also allow manual trigger
   workflow_dispatch:
 
 jobs:
