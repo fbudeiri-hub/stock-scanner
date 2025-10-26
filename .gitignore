@@ -6,17 +6,21 @@
 logs/
 __pycache__/
 *.pyc
-
-# Allow output folder and results CSV
-!data/output/
-!data/output/scan_results_latest.csv
-
-# Ignore all other data paths
-data/
+.pytest_cache/
 
 # Ignore IDE and OS files
 .vscode/
 .idea/
 *.swp
+*.swo
 .DS_Store
 Thumbs.db
+
+# ALLOW output folder - important for GitHub Actions!
+!data/
+!data/output/
+!data/output/scan_results_latest.csv
+
+# Ignore everything else in data EXCEPT output
+data/**
+!data/output/**
