@@ -35,8 +35,8 @@ class ScannerIntegration:
         self.fetcher = QuoteFetcher()
         self.indicators = TechnicalIndicators()
         self.momentum_scorer = MomentumScorer()
-        self.news_analyzer = NewsAnalyzer()  # NEW: News sentiment
-        self.entry_exit_calc = EntryExitCalculator()  # NEW: Trading signals
+        self.news_analyzer = NewsAnalyzer()
+        self.entry_exit_calc = EntryExitCalculator()
         
         # Timezone support
         self.uk_tz = pytz.timezone('Europe/London')
@@ -55,6 +55,9 @@ class ScannerIntegration:
             else:
                 symbols = df.iloc[:, 0].tolist()
             
+            # Clean symbols (strip whitespace)
+            symbols = [s.strip() for s in symbols if isinstance(s, str) and s.strip()]
+            
             logger.info(f"Loaded {len(symbols)} symbols from {filepath}")
             return symbols
         except Exception as e:
@@ -62,11 +65,12 @@ class ScannerIntegration:
             return []
 
     def fetch_batch(self, symbols: List[str], days: int = 30) -> list:
-        """Fetch data for a batch of symbols."""
+        """Fetch data for a batch of symbols using the correct QuoteFetcher method."""
         results = []
         for symbol in symbols:
             try:
-                data = self.fetcher.fetch_ohlcv(symbol, days=days)
+                # Use fetch_with_fallback() - the correct method name
+                data = self.fetcher.fetch_with_fallback(symbol, days=days)
                 if data is not None and not data.empty:
                     results.append({
                         'symbol': symbol,
@@ -89,7 +93,7 @@ class ScannerIntegration:
                 # Technical indicators
                 indicators_df = self.indicators.add_indicators(data.copy())
                 
-                # News sentiment (NEW)
+                # News sentiment
                 sentiment_score = self.news_analyzer.get_sentiment_score(symbol)
                 
                 # Composite momentum score
@@ -97,13 +101,13 @@ class ScannerIntegration:
                 composite_score = (
                     0.30 * (tech_score / 100) +
                     0.25 * (self.momentum_scorer.momentum_score / 100) +
-                    0.25 * ((sentiment_score + 100) / 200) +  # Normalize -100 to +100 → 0 to 1
+                    0.25 * ((sentiment_score + 100) / 200) +
                     0.20 * (self.momentum_scorer.volume_score / 100)
                 ) * 100
                 
                 current_price = indicators_df['close'].iloc[-1]
                 
-                # Entry/Exit prices (NEW)
+                # Entry/Exit prices
                 entry_price = self.entry_exit_calc.calculate_entry(
                     symbol=symbol,
                     current_price=current_price,
@@ -114,12 +118,12 @@ class ScannerIntegration:
                 stop_loss = self.entry_exit_calc.calculate_stop_loss(
                     entry_price=entry_price,
                     current_price=current_price,
-                    volatility=indicators_df['atr'].iloc[-1] if 'atr' in indicators_df.columns else current_price * 0.02
+                    volatility=indicators_df.get('atr', [current_price * 0.02]).iloc[-1] if 'atr' in indicators_df.columns else current_price * 0.02
                 )
                 
                 take_profit = self.entry_exit_calc.calculate_take_profit(
                     entry_price=entry_price,
-                    risk_reward_ratio=2.0  # 1:2 risk/reward
+                    risk_reward_ratio=2.0
                 )
                 
                 processed.append({
@@ -260,4 +264,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
