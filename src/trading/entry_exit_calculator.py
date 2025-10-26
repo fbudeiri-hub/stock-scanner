@@ -127,3 +127,4 @@ class EntryExitCalculator:
             'risk_percentage': (risk / entry) * 100,
             'reward_percentage': (reward / entry) * 100
         }
+
