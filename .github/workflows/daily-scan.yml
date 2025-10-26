@@ -76,7 +76,7 @@ jobs:
           echo "**Next Steps**" >> $GITHUB_STEP_SUMMARY
           echo "- Check push notification on GitHub mobile app" >> $GITHUB_STEP_SUMMARY
           echo "- Review buy recommendations with suggested entry/stop/profit levels" >> $GITHUB_STEP_SUMMARY
-          echo "- CSV results available in `/data/scan_results_YYYYMMDD_HHMMSS.csv`" >> $GITHUB_STEP_SUMMARY
+          echo "- CSV results available in \`/data/scan_results_YYYYMMDD_HHMMSS.csv\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Commit and push results
         run: |
@@ -98,4 +98,3 @@ jobs:
         if: failure()
         run: |
           echo "❌ Scan failed - check logs" >> $GITHUB_STEP_SUMMARY
-          
