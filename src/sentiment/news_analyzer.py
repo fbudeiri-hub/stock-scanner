@@ -122,3 +122,4 @@ class NewsAnalyzer:
             return datetime.fromisoformat(date_string.replace('Z', '+00:00'))
         except:
             return datetime.utcnow()
+
