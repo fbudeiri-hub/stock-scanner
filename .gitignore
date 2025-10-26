@@ -16,12 +16,23 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# ALLOW output folder - important for GitHub Actions!
-!data/
-!data/output/
-!data/output/scan_results_latest.csv
+# ============================================================
+# DATA FOLDER RULES
+# ============================================================
+# ALLOW ticker configuration files (for GitHub Actions to read)
+!data/tickers_*.csv
+!data/tickers_*.txt
 
-# Ignore everything else in data EXCEPT output
+# ALLOW output folder (for GitHub Actions to save results)
+!data/output/
+!data/output/scan_results_*.csv
+
+# Ignore EVERYTHING ELSE in data folder
 data/**
+# But explicitly allow the files above
+!data/tickers_*.csv
+!data/tickers_*.txt
+!data/output/
 !data/output/**
+
 
