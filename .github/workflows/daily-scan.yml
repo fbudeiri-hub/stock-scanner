@@ -98,3 +98,4 @@ jobs:
         if: failure()
         run: |
           echo "❌ Scan failed - check logs" >> $GITHUB_STEP_SUMMARY
+          
