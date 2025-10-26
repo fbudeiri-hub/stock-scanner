@@ -1,40 +1,78 @@
 name: Daily Stock Scanner
 
 on:
+  # Scheduled runs - every 30-45 min during trading hours
   schedule:
-    - cron: '30 14 * * 1-5'
+    - cron: '30 13 * * 1-5'  # 13:30 UK (pre-market)
+    - cron: '0 14 * * 1-5'   # 14:00 UK
+    - cron: '30 14 * * 1-5'  # 14:30 UK
+    - cron: '0 15 * * 1-5'   # 15:00 UK
+    - cron: '30 15 * * 1-5'  # 15:30 UK
+    - cron: '0 16 * * 1-5'   # 16:00 UK
+    - cron: '30 16 * * 1-5'  # 16:30 UK
+  
+  # Manual trigger - allows testing NOW!
   workflow_dispatch:
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    
+    timeout-minutes: 60
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
-      - name: Run stock scanner
+
+      - name: Run stock scanner with 5000 tickers
         env:
+          POLYGON_KEY: ${{ secrets.POLYGON_KEY }}
           FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
-          MARKETSTACK_KEY: ${{ secrets.MARKETSTACK_KEY }}
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
         run: |
-          python -m src.main --tickers data/tickers_1000.csv
-      
+          python -c "
+          import os
+          import pandas as pd
+          from src.analysis.scanner_integration import ScannerIntegration
+          from src.analysis.dashboard import DashboardGenerator
+          
+          os.makedirs('data', exist_ok=True)
+          
+          # Load 5000 tickers
+          ticker_file = 'data/tickers_5000.csv'
+          if os.path.exists(ticker_file):
+            df_tickers = pd.read_csv(ticker_file)
+            symbols = df_tickers['symbol'].tolist()
+            print(f'Scanning {len(symbols)} stocks...')
+            
+            # Run scanner
+            scanner = ScannerIntegration(batch_size=50, max_workers=4)
+            results = scanner.scan_all(symbols, days=30, score_threshold=50)
+            
+            if not results.empty:
+              scanner.save_results(results)
+              gen = DashboardGenerator()
+              gen.generate_html(results, 'index.html')
+              print(f'✓ Scan complete: {len(results)} stocks above threshold')
+            else:
+              print('✗ No results generated')
+          else:
+            print(f'✗ Ticker file not found: {ticker_file}')
+          "
+
       - name: Commit and push results
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add data/output/scan_results_latest.csv
-          git commit -m "Daily scan: $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
-          git push       
+          git config --local user.email "github-actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add -A
+          git commit -m "Daily scan: $(date +'%Y-%m-%d %H:%M:%S UTC')" || echo "No changes"
+          git push origin main
