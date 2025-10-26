@@ -91,7 +91,7 @@ class ScannerIntegration:
                 data = item['data']
                 
                 # Technical indicators
-                indicators_df = self.indicators.add_indicators(data.copy())
+                indicators_df = self.indicators.add_indicators_to_dataframe(data.copy())
                 
                 # News sentiment
                 sentiment_score = self.news_analyzer.get_sentiment_score(symbol)
