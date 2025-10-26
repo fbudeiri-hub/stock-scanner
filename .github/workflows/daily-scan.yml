@@ -37,4 +37,4 @@ jobs:
           git config --local user.name "GitHub Action"
           git add data/output/scan_results_latest.csv
           git commit -m "Daily scan: $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
-          git push
+          git push       
