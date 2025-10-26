@@ -87,7 +87,7 @@ jobs:
           git push
 
       - name: Upload results artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: scan-results-${{ github.run_id }}
