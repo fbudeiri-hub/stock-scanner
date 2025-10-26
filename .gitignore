@@ -1,13 +1,22 @@
+# Prevent secrets
 .env
-*.pyc
+*.env
+
+# Ignore logs and caches
+logs/
 __pycache__/
+*.pyc
+
+# Allow output folder and results CSV
+!data/output/
+!data/output/scan_results_latest.csv
+
+# Ignore all other data paths
+data/
+
+# Ignore IDE and OS files
 .vscode/
 .idea/
-*.log
-logs/*.log
-data/output/*.csv
-data/output/*.json
-*.db
-*.sqlite
-venv/
+*.swp
 .DS_Store
+Thumbs.db
