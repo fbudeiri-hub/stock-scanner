@@ -1,0 +1,11 @@
+{
+  "timestamp": "2025-10-25T12:51:39.437831",
+  "total_symbols": 100,
+  "retrieved": 100,
+  "coverage": "100.0%",
+  "failed_symbols": [],
+  "provider_breakdown": {
+    "Marketstack": 0,
+    "Finnhub": 99
+  }
+}

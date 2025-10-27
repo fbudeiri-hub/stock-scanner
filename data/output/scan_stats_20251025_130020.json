@@ -1,0 +1,10 @@
+{
+  "timestamp": "2025-10-25T13:00:20.253754",
+  "total": 100,
+  "retrieved": 100,
+  "coverage": "100.0%",
+  "stats": {
+    "finnhub": 99,
+    "marketstack": 0
+  }
+}

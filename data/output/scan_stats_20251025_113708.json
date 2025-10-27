@@ -1,0 +1,18 @@
+{
+  "timestamp": "2025-10-25T11:37:08.168185",
+  "total_symbols": 10,
+  "retrieved": 0,
+  "coverage": "0.0%",
+  "failed_symbols": [
+    "MSFT",
+    "META",
+    "GOOG",
+    "AMZN",
+    "TSLA",
+    "NVDA",
+    "AAPL",
+    "ADBE",
+    "NFLX",
+    "CRM"
+  ]
+}
