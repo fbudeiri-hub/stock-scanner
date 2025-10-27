@@ -1,16 +1,25 @@
-name: Daily Stock Scanner - Production (TIER 4 Maximum Safe)
+name: Daily Stock Scanner - Production (6 Providers, 9 Scans/Day)
 
 on:
   schedule:
-    - cron: '30 13 * * 1-5'   # Pre-market 8:30 AM ET = 1:30 PM UTC
-    - cron: '30 14 * * 1-5'   # 9:30 AM ET
-    - cron: '30 15 * * 1-5'   # 10:30 AM ET
-    - cron: '30 16 * * 1-5'   # 11:30 AM ET
-    - cron: '30 17 * * 1-5'   # 12:30 PM ET
-    - cron: '30 18 * * 1-5'   # 1:30 PM ET
-    - cron: '30 19 * * 1-5'   # 2:30 PM ET
-    - cron: '30 20 * * 1-5'   # 3:30 PM ET
-    - cron: '30 21 * * 1-5'   # 4:30 PM ET (after market close)
+    # Pre-market: 8:30 AM ET (1:30 PM UTC)
+    - cron: '30 13 * * 1-5'
+    # 9:30 AM ET
+    - cron: '30 14 * * 1-5'
+    # 10:30 AM ET
+    - cron: '30 15 * * 1-5'
+    # 11:30 AM ET
+    - cron: '30 16 * * 1-5'
+    # 12:30 PM ET
+    - cron: '30 17 * * 1-5'
+    # 1:30 PM ET
+    - cron: '30 18 * * 1-5'
+    # 2:30 PM ET
+    - cron: '30 19 * * 1-5'
+    # 3:30 PM ET
+    - cron: '30 20 * * 1-5'
+    # 4:30 PM ET
+    - cron: '30 21 * * 1-5'
   
   workflow_dispatch:
 
@@ -22,8 +31,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GIT_TOKEN_CUSTOM }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -35,11 +42,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run production scanner (5000 US stocks)
+      - name: Run production scanner (5000 US stocks, 6 providers)
         env:
           POLYGON_KEY: ${{ secrets.POLYGON_KEY }}
           FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
-          MARKETSTACK_KEY: ${{ secrets.MARKETSTACK_KEY }}
           TWELVE_DATA_KEY: ${{ secrets.TWELVE_DATA_KEY }}
           FMP_KEY: ${{ secrets.FMP_KEY }}
           TIINGO_KEY: ${{ secrets.TIINGO_KEY }}
@@ -59,35 +65,30 @@ jobs:
         run: |
           python src/visualization/dashboard_generator.py
 
-      - name: Generate GitHub Notification Summary
+      - name: Create Summary for GitHub Notification
         if: success()
         run: |
-          echo "# ✅ Daily Stock Scanner - Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Execution Time**" >> $GITHUB_STEP_SUMMARY
-          echo "- UK Time: $(TZ=Europe/London date)" >> $GITHUB_STEP_SUMMARY
-          echo "- ET Time: $(TZ=America/New_York date)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Scan Completed**" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ 5,000 US stocks analyzed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Professional entry/exit prices calculated" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ News sentiment analysis included" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Technical indicators (RSI, MACD, Bollinger Bands) evaluated" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Results Location**" >> $GITHUB_STEP_SUMMARY
-          echo "- CSV: \`data/output/scan_results_*.csv\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Dashboard: \`data/output/dashboard.html\`" >> $GITHUB_STEP_SUMMARY
+          echo "# Stock Scanner Complete" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "- 5,000 US stocks analyzed" >> $GITHUB_STEP_SUMMARY
+          echo "- 6 data providers (Finnhub, Polygon, 12Data, FMP, Tiingo, AlphaVantage)" >> $GITHUB_STEP_SUMMARY
+          echo "- Technical indicators: RSI, MACD, Bollinger Bands" >> $GITHUB_STEP_SUMMARY
+          echo "- News sentiment analysis enabled" >> $GITHUB_STEP_SUMMARY
+          echo "- Professional entry/exit/stop prices calculated" >> $GITHUB_STEP_SUMMARY
+          echo "**Time Zones:**" >> $GITHUB_STEP_SUMMARY
+          echo "- UK: $(TZ=Europe/London date)" >> $GITHUB_STEP_SUMMARY
+          echo "- ET: $(TZ=America/New_York date)" >> $GITHUB_STEP_SUMMARY
 
-      - name: Commit and push results to trigger notifications
+      - name: Commit and push results
         if: success()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add -A
-          git commit -m "Scan: $(date +'%Y-%m-%d %H:%M UTC') - 5000 stocks analyzed, recommendations ready" || true
-          git push origin main
+          git commit -m "Scan: $(date +'%Y-%m-%d %H:%M UTC') - 5000 stocks analyzed with recommendations" || true
+          git push
 
-      - name: Upload results as artifact
+      - name: Upload results
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -96,9 +97,3 @@ jobs:
             data/output/scan_results_*.csv
             data/output/dashboard.html
           retention-days: 30
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "❌ SCAN FAILED" >> $GITHUB_STEP_SUMMARY
-          echo "Check GitHub Actions logs for error details" >> $GITHUB_STEP_SUMMARY
