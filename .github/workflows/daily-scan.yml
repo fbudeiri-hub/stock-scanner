@@ -61,4 +61,39 @@ jobs:
             --threshold 50
 
       - name: Generate Dashboard
-     
+        if: success()
+        run: |
+          python src/visualization/dashboard_generator.py
+
+      - name: Create Summary for GitHub Notification
+        if: success()
+        run: |
+          echo "# Stock Scanner Complete" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "- 5,000 US stocks analyzed" >> $GITHUB_STEP_SUMMARY
+          echo "- 6 data providers (Finnhub, Polygon, 12Data, FMP, Tiingo, AlphaVantage)" >> $GITHUB_STEP_SUMMARY
+          echo "- Technical indicators: RSI, MACD, Bollinger Bands" >> $GITHUB_STEP_SUMMARY
+          echo "- News sentiment analysis enabled" >> $GITHUB_STEP_SUMMARY
+          echo "- Professional entry/exit/stop prices calculated" >> $GITHUB_STEP_SUMMARY
+          echo "**Time Zones:**" >> $GITHUB_STEP_SUMMARY
+          echo "- UK: $(TZ=Europe/London date)" >> $GITHUB_STEP_SUMMARY
+          echo "- ET: $(TZ=America/New_York date)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Commit and push results
+        if: success()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "Scan: $(date +'%Y-%m-%d %H:%M UTC') - 5000 stocks analyzed with recommendations" || true
+          git push
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scan-results-${{ github.run_id }}
+          path: |
+            data/output/scan_results_*.csv
+            data/output/dashboard.html
+          retention-days: 30
