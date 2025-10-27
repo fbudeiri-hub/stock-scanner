@@ -14,10 +14,6 @@ class QuoteFetcher:
     def __init__(self):
         self.finnhub_key = os.getenv('FINNHUB_KEY', '')
         self.twelvedata_key = os.getenv('TWELVEDATA_KEY', '')
-        self.fmp_key = os.getenv('FMP_KEY', '')
-        self.polygon_key = os.getenv('POLYGON_KEY', '')
-        self.tiingo_key = os.getenv('TIINGO_KEY', '')
-        self.alphavantage_key = os.getenv('ALPHAVANTAGE_KEY', '')
         self.rate_limit_wait = 0.1
         
     def fetch_finnhub(self, symbol: str, days: int = 30):
@@ -51,35 +47,6 @@ class QuoteFetcher:
             return None
         except:
             return None
-    
-    def fetch_twelvedata(self, symbol: str, days: int = 30):
-        try:
-            time.sleep(self.rate_limit_wait)
-            resp = requests.get(
-                "https://api.twelvedata.com/time_series",
-                params={
-                    'symbol': symbol,
-                    'interval': '1day',
-                    'outputsize': days * 2,
-                    'apikey': self.twelvedata_key
-                },
-                timeout=5
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if 'data' in data and len(data['data']) >= 2:
-                    df = pd.DataFrame([{
-                        'open': float(d['open']),
-                        'high': float(d['high']),
-                        'low': float(d['low']),
-                        'close': float(d['close']),
-                        'volume': float(d['volume'])
-                    } for d in data['data']])
-                    logger.info(f"TwelveData {symbol}: {len(df)} bars")
-                    return df
-            return None
-        except:
-            return None
 
     def fetch_yfinance(self, symbol: str, days: int = 30):
         try:
@@ -95,12 +62,8 @@ class QuoteFetcher:
             return None
     
     def fetch_with_fallback(self, symbol: str, days: int = 30):
-        """Try providers in order: Finnhub -> TwelveData -> YFinance"""
+        """Try providers: Finnhub -> YFinance"""
         df = self.fetch_finnhub(symbol, days)
-        if df is not None:
-            return df
-        
-        df = self.fetch_twelvedata(symbol, days)
         if df is not None:
             return df
         
@@ -112,6 +75,7 @@ class QuoteFetcher:
         return None
 
     def fetch_batch(self, symbols: list, days: int = 30, workers: int = 3):
+        """Parallel batch fetching with rate limiting"""
         results = {}
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {executor.submit(self.fetch_with_fallback, sym, days): sym for sym in symbols}
