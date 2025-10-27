@@ -62,20 +62,16 @@ class QuoteFetcher:
             return None
     
     def fetch_with_fallback(self, symbol: str, days: int = 30):
-        """Try providers: Finnhub -> YFinance"""
         df = self.fetch_finnhub(symbol, days)
         if df is not None:
             return df
-        
         df = self.fetch_yfinance(symbol, days)
         if df is not None:
             return df
-        
         logger.warning(f"All providers failed: {symbol}")
         return None
 
     def fetch_batch(self, symbols: list, days: int = 30, workers: int = 3):
-        """Parallel batch fetching with rate limiting"""
         results = {}
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {executor.submit(self.fetch_with_fallback, sym, days): sym for sym in symbols}
@@ -89,6 +85,5 @@ class QuoteFetcher:
                     pass
                 if (i + 1) % 100 == 0:
                     logger.info(f"Progress: {i+1}/{len(symbols)} ({len(results)} success)")
-        
         logger.info(f"Batch complete: {len(results)}/{len(symbols)} stocks")
         return results

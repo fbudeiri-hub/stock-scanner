@@ -1,102 +1,54 @@
-name: Daily Stock Scanner - Production (TIER 4 Maximum Safe)
+name: Daily Stock Scanner - Production
 
 on:
-  schedule:
-    # Pre-market: 1 hour before US market open (8:30 AM ET = 1:30 PM UTC) 
-    - cron: '30 13 * * 1-5'
-    
-    # Hourly during market hours - every 60 min (prevents overlaps)
-    - cron: '30 14 * * 1-5'   # 9:30 AM ET
-    - cron: '30 15 * * 1-5'   # 10:30 AM ET
-    - cron: '30 16 * * 1-5'   # 11:30 AM ET
-    - cron: '30 17 * * 1-5'   # 12:30 PM ET
-    - cron: '30 18 * * 1-5'   # 1:30 PM ET
-    - cron: '30 19 * * 1-5'   # 2:30 PM ET
-    - cron: '30 20 * * 1-5'   # 3:30 PM ET
-    - cron: '30 21 * * 1-5'   # 4:30 PM ET (after market close)
-  
   workflow_dispatch:
+  schedule:
+    - cron: '0 14 * * 1-5'
+
+permissions:
+  contents: write
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GIT_TOKEN_CUSTOM }}
+      
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
+      
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run production scanner (5000 US stocks from UK)
+          pip install pandas numpy yfinance requests ta-lib-bin
+      
+      - name: Run scanner
         env:
-          # Data providers
-          POLYGON_KEY: ${{ secrets.POLYGON_KEY }}
           FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
-          MARKETSTACK_KEY: ${{ secrets.MARKETSTACK_KEY }}
-          TWELVE_DATA_KEY: ${{ secrets.TWELVE_DATA_KEY }}
+          TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
           FMP_KEY: ${{ secrets.FMP_KEY }}
+          POLYGON_KEY: ${{ secrets.POLYGON_KEY }}
           TIINGO_KEY: ${{ secrets.TIINGO_KEY }}
-          ALPHA_VANTAGE_KEY: ${{ secrets.ALPHA_VANTAGE_KEY }}
-          
-          # Sentiment analysis
-          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          ALPHAVANTAGE_KEY: ${{ secrets.ALPHAVANTAGE_KEY }}
+        run: python src/analysis/scanner_final.py
+      
+      - name: Generate dashboard
+        run: python -c "from src.visualization.dashboard_generator import generate_dashboard; generate_dashboard('data/output/scan_results_latest.csv')"
+      
+      - name: Commit results
         run: |
-          python -m src.analysis.scanner_final \
-            --tickers data/tickers_5000.csv \
-            --batch-size 100 \
-            --workers 6 \
-            --days 30 \
-            --threshold 50
-
-      - name: Generate GitHub Notification Summary
-        if: success()
-        run: |
-          echo "# ✅ Daily Stock Scanner - Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Time Zones**" >> $GITHUB_STEP_SUMMARY
-          echo "- UK Time: $(TZ=Europe/London date)" >> $GITHUB_STEP_SUMMARY
-          echo "- ET Time: $(TZ=America/New_York date)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Scan Results**" >> $GITHUB_STEP_SUMMARY
-          echo "- 5,000 US stocks analyzed" >> $GITHUB_STEP_SUMMARY
-          echo "- Professional entry/exit prices calculated" >> $GITHUB_STEP_SUMMARY
-          echo "- News sentiment analysis included" >> $GITHUB_STEP_SUMMARY
-          echo "- Technical indicators (RSI, MACD, Bollinger Bands) evaluated" >> $GITHUB_STEP_SUMMARY
-          echo "- Multi-signal weighting applied (30% technical, 25% momentum, 25% sentiment, 20% volume)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Next Steps**" >> $GITHUB_STEP_SUMMARY
-          echo "- Check push notification on GitHub mobile app" >> $GITHUB_STEP_SUMMARY
-          echo "- Review buy recommendations with suggested entry/stop/profit levels" >> $GITHUB_STEP_SUMMARY
-          echo "- CSV results available in \`/data/scan_results_YYYYMMDD_HHMMSS.csv\`" >> $GITHUB_STEP_SUMMARY
-
-      - name: Commit and push results
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add -A
-          git commit -m "Scan: $(date +'%Y-%m-%d %H:%M UTC') - 5000 stocks analyzed" || true
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add data/output/*
+          git commit -m "Scan: $(date +'%Y-%m-%d %H:%M UTC')" || echo "No changes"
           git push
-
-      - name: Upload results artifact
-        uses: actions/upload-artifact@v4
-        if: always()
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
         with:
-          name: scan-results-${{ github.run_id }}
-          path: data/scan_results_*.csv
-          retention-days: 30
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "❌ Scan failed - check logs" >> $GITHUB_STEP_SUMMARY
-
-          
+          name: scan-results
+          path: |
+            data/output/scan_results_latest.csv
+            data/output/dashboard.html
