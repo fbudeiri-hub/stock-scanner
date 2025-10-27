@@ -1,39 +1,26 @@
-name: Daily Stock Scanner - Production (6 Providers, 9 Scans/Day)
+name: Daily Stock Scanner - Two-Tier Strategy
 
 on:
   schedule:
-    # Pre-market: 8:30 AM ET (1:30 PM UTC)
+    # TIER 1: Full scan 8:30 AM ET (1:30 PM UTC)
     - cron: '30 13 * * 1-5'
-    # 9:30 AM ET
-    - cron: '30 14 * * 1-5'
-    # 10:30 AM ET
-    - cron: '30 15 * * 1-5'
-    # 11:30 AM ET
-    - cron: '30 16 * * 1-5'
-    # 12:30 PM ET
-    - cron: '30 17 * * 1-5'
-    # 1:30 PM ET
-    - cron: '30 18 * * 1-5'
-    # 2:30 PM ET
-    - cron: '30 19 * * 1-5'
-    # 3:30 PM ET
-    - cron: '30 20 * * 1-5'
-    # 4:30 PM ET
-    - cron: '30 21 * * 1-5'
+    # TIER 1: Full scan 4:00 PM ET (9:00 PM UTC)
+    - cron: '0 21 * * 1-5'
+    
+    # TIER 2: Intraday hourly scans (10 AM - 4 PM ET)
+    - cron: '0 14,15,16,17,18,19,20,21 * * 1-5'
   
   workflow_dispatch:
 
 jobs:
-  scan:
+  tier1_full_scan:
+    name: Tier 1 - Full Scan (All 5000 stocks)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
@@ -42,58 +29,72 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run production scanner (5000 US stocks, 6 providers)
+      - name: Run TIER 1 Full Scan
         env:
           POLYGON_KEY: ${{ secrets.POLYGON_KEY }}
-          FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
           TWELVE_DATA_KEY: ${{ secrets.TWELVE_DATA_KEY }}
-          FMP_KEY: ${{ secrets.FMP_KEY }}
-          TIINGO_KEY: ${{ secrets.TIINGO_KEY }}
-          ALPHA_VANTAGE_KEY: ${{ secrets.ALPHA_VANTAGE_KEY }}
-          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
         run: |
-          python -m src.analysis.scanner_final \
+          python -m src.analysis.scanner_full \
             --tickers data/tickers_5000.csv \
             --output-dir data/output \
-            --batch-size 100 \
-            --workers 6 \
             --days 30 \
             --threshold 50
 
-      - name: Generate Dashboard
-        if: success()
-        run: |
-          python src/visualization/dashboard_generator.py
-
-      - name: Create Summary for GitHub Notification
-        if: success()
-        run: |
-          echo "# Stock Scanner Complete" >> $GITHUB_STEP_SUMMARY
-          echo "**Scan Details:**" >> $GITHUB_STEP_SUMMARY
-          echo "- 5,000 US stocks analyzed" >> $GITHUB_STEP_SUMMARY
-          echo "- 6 data providers (Finnhub, Polygon, 12Data, FMP, Tiingo, AlphaVantage)" >> $GITHUB_STEP_SUMMARY
-          echo "- Technical indicators: RSI, MACD, Bollinger Bands" >> $GITHUB_STEP_SUMMARY
-          echo "- News sentiment analysis enabled" >> $GITHUB_STEP_SUMMARY
-          echo "- Professional entry/exit/stop prices calculated" >> $GITHUB_STEP_SUMMARY
-          echo "**Time Zones:**" >> $GITHUB_STEP_SUMMARY
-          echo "- UK: $(TZ=Europe/London date)" >> $GITHUB_STEP_SUMMARY
-          echo "- ET: $(TZ=America/New_York date)" >> $GITHUB_STEP_SUMMARY
-
       - name: Commit and push results
-        if: success()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add -A
-          git commit -m "Scan: $(date +'%Y-%m-%d %H:%M UTC') - 5000 stocks analyzed with recommendations" || true
+          git commit -m "Tier 1 Scan: $(date +'%Y-%m-%d %H:%M UTC') - Full 5000 stock analysis" || true
           git push
 
-      - name: Upload results
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: scan-results-${{ github.run_id }}
-          path: |
-            data/output/scan_results_*.csv
-            data/output/dashboard.html
+          name: tier1-full-scan-${{ github.run_id }}
+          path: data/output/full_scan_*.csv
+          retention-days: 30
+
+  tier2_focus_scan:
+    name: Tier 2 - Focus Scan (Top 100 momentum)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: tier1_full_scan
+    if: success()
+    
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run TIER 2 Focus Scan
+        env:
+          POLYGON_KEY: ${{ secrets.POLYGON_KEY }}
+          TWELVE_DATA_KEY: ${{ secrets.TWELVE_DATA_KEY }}
+        run: |
+          python -m src.analysis.scanner_momentum_focus \
+            --watchlist data/output/watchlist_top100.txt \
+            --output-dir data/output \
+            --days 5 \
+            --threshold 40
+
+      - name: Commit and push results
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "Tier 2 Scan: $(date +'%Y-%m-%d %H:%M UTC') - Top 100 momentum update" || true
+          git push
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier2-focus-scan-${{ github.run_id }}
+          path: data/output/focus_scan_*.csv
           retention-days: 30
