@@ -1,0 +1,13 @@
+At line ~55 in src/analysis/quote_fetcher.py, wrap in try-except:
+
+try:
+    df = yf.download(symbol, start=start_date, end=end_date, progress=False)
+    if df.empty or len(df) < 2:
+        raise ValueError("Insufficient data")
+    # Verify expected columns
+    if 'Close' not in df.columns:
+        raise ValueError("Missing OHLCV data")
+except Exception as e:
+    logger.warning(f"yfinance failed for {symbol}: {str(e)}")
+    # Skip to Polygon fallback
+    return fetch_polygon(...)
