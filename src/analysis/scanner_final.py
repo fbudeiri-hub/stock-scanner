@@ -90,7 +90,7 @@ class ScannerIntegration:
                 symbol = item['symbol']
                 data = item['data']
                 
-                # Technical indicators
+                # Technical indicators - FIXED METHOD NAME
                 indicators_df = self.indicators.add_indicators_to_dataframe(data.copy())
                 
                 # News sentiment
