@@ -1,125 +1,64 @@
-import pandas as pd
-import logging
+"""One observation per symbol at its LATEST bar, with explicit failure propagation."""
+from __future__ import annotations
+from datetime import datetime,timezone
+from pathlib import Path
+import json
 import os
-from datetime import datetime
+import tempfile
+import pandas as pd
+from .quote_fetcher import QuoteFetcher
+from .indicators import TechnicalIndicators
+from .momentum_scorer import MomentumScorer
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+def analyze_symbols(symbols,days=120,workers=4):
+    if type(days) is not int or days<90:
+        raise ValueError('At least 90 calendar days required for indicator warm-up')
+    frames=QuoteFetcher().fetch_batch(symbols,days=days,workers=workers)
+    if not frames:
+        raise RuntimeError('No market data fetched; scan failed')
+    processed=[]
+    for symbol,frame in frames.items():
+        indicators=TechnicalIndicators.add_indicators_to_dataframe(frame)
+        scores=MomentumScorer.add_momentum_scores(indicators)
+        latest=scores.sort_values('timestamp').tail(1)
+        if latest.momentum_score.notna().all():
+            processed.append(latest)
+    if not processed:
+        raise RuntimeError('No symbols completed indicator warm-up')
+    return pd.concat(processed,ignore_index=True).sort_values(['momentum_score','symbol'],ascending=[False,True])
+
+def atomic_text(path,text):
+    path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)
+    fd,tmp=tempfile.mkstemp(dir=path.parent,prefix='.scan-')
+    try:
+        with os.fdopen(fd,'w',encoding='utf-8') as f:
+            f.write(text); f.flush(); os.fsync(f.fileno())
+        os.replace(tmp,path)
+    finally:
+        if os.path.exists(tmp): os.unlink(tmp)
 
 class FullStockScanner:
-    """TIER 1: Full scan of all 5000 stocks (2x daily)"""
-    
-    def __init__(self, batch_size=100, workers=6):
-        self.batch_size = batch_size
-        self.workers = workers
+    def __init__(self,batch_size=100,workers=4): self.batch_size,self.workers=batch_size,workers
+    def run(self,tickers_file='data/tickers_5000.csv',output_dir='data/output',days=120,threshold=50):
+        symbols=list(dict.fromkeys(pd.read_csv(tickers_file)['symbol'].dropna().astype(str).str.strip().str.upper()))
+        latest=analyze_symbols(symbols,days,self.workers)
+        results=latest[latest.momentum_score>=threshold].copy()
+        # No arbitrary historical high-score fallback when there are no candidates.
+        now=datetime.now(timezone.utc)
+        target=Path(output_dir)
+        atomic_text(target/f'full_scan_{now.strftime("%Y%m%d_%H%M%S_%f")}.csv',results.to_csv(index=False))
+        atomic_text(target/'watchlist_top100.txt',''.join(f'{s}\n' for s in results.head(100).symbol))
+        bundle={'generated_at':now.isoformat(),'source':'yfinance_daily_adjusted','requested_symbols':len(symbols),
+                'valid_symbols':len(latest),'candidate_count':len(results),'execution_authorized':False,
+                'records':[{'symbol':r.symbol,'as_of':r.timestamp.isoformat(),'close':float(r.close),
+                            'momentum_score':float(r.momentum_score),'signal':MomentumScorer.get_signal(r.momentum_score)}
+                           for r in results.itertuples()]}
+        atomic_text(target/'scan_latest.json',json.dumps(bundle,indent=2,allow_nan=False))
+        return results
 
-    def run(self, tickers_file='data/tickers_5000.csv', output_dir='data/output',
-            days=30, threshold=50):
-        """Full scan: all 4975 stocks"""
-        
-        try:
-            logger.info("=" * 60)
-            logger.info("TIER 1: FULL SCAN - ALL 4,975 STOCKS")
-            logger.info("=" * 60)
-            
-            # Load tickers
-            logger.info("Loading ticker list...")
-            df_tickers = pd.read_csv(tickers_file)
-            symbols = df_tickers['symbol'].tolist()
-            logger.info(f"📊 Starting FULL scan of {len(symbols)} stocks")
-
-            # Import modules
-            from src.analysis.quote_fetcher import QuoteFetcher
-            from src.analysis.indicators import TechnicalIndicators
-            from src.analysis.momentum_scorer import MomentumScorer
-
-            fetcher = QuoteFetcher()
-            indicators = TechnicalIndicators()
-            scorer = MomentumScorer()
-
-            # Fetch data for ALL stocks
-            logger.info(f"Fetching {days} days of data with {self.workers} workers...")
-            batch_data = fetcher.fetch_batch(symbols, days=days, workers=self.workers)
-            logger.info(f"✅ Retrieved {len(batch_data)}/{len(symbols)} stocks")
-
-            if not batch_data:
-                logger.error("No data retrieved!")
-                return None
-
-            # Calculate indicators
-            logger.info("Calculating technical indicators...")
-            processed_data = []
-            
-            for symbol, df in batch_data.items():
-                try:
-                    df_with_indicators = indicators.add_indicators_to_dataframe(df)
-                    processed_data.append(df_with_indicators)
-                except Exception as e:
-                    logger.debug(f"Indicator calc failed for {symbol}: {e}")
-
-            if not processed_data:
-                logger.error("No data after indicators!")
-                return None
-
-            # Combine all data
-            all_data = pd.concat(processed_data, ignore_index=True)
-            logger.info(f"Combined data shape: {all_data.shape}")
-
-            # Score momentum
-            logger.info("Scoring momentum...")
-            all_data = scorer.add_momentum_scores(all_data)
-
-            # Filter & rank
-            df_results = all_data[all_data['momentum_score'] >= threshold].copy()
-            df_results = df_results.sort_values('momentum_score', ascending=False)
-            df_results = df_results.drop_duplicates(subset=['symbol'], keep='first')
-
-            if df_results.empty:
-                logger.warning(f"No stocks above threshold {threshold}, using top 500")
-                df_results = all_data.nlargest(500, 'momentum_score')
-
-            # Save FULL results
-            os.makedirs(output_dir, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            full_output = f"{output_dir}/full_scan_{timestamp}.csv"
-            df_results.to_csv(full_output, index=False)
-
-            logger.info(f"✅ FULL SCAN COMPLETE")
-            logger.info(f"Results: {full_output}")
-            logger.info(f"Total recommendations: {len(df_results)}")
-            logger.info(f"Top 5 stocks:")
-            print(df_results[['symbol', 'close', 'momentum_score']].head(5).to_string())
-
-            # Save TOP 100 to watchlist for TIER 2 scanning
-            top_100 = df_results.head(100)['symbol'].tolist()
-            watchlist_file = f"{output_dir}/watchlist_top100.txt"
-            with open(watchlist_file, 'w') as f:
-                for symbol in top_100:
-                    f.write(f"{symbol}\n")
-            
-            logger.info(f"📋 Watchlist saved: {watchlist_file} ({len(top_100)} symbols)")
-
-            return df_results
-
-        except Exception as e:
-            logger.error(f"Full scanner failed: {e}", exc_info=True)
-            raise
-
-if __name__ == '__main__':
+if __name__=='__main__':
     import argparse
-    
-    parser = argparse.ArgumentParser(description='TIER 1: Full Stock Scanner')
-    parser.add_argument('--tickers', type=str, default='data/tickers_5000.csv')
-    parser.add_argument('--output-dir', type=str, default='data/output')
-    parser.add_argument('--days', type=int, default=30)
-    parser.add_argument('--threshold', type=int, default=50)
-
-    args = parser.parse_args()
-
-    scanner = FullStockScanner()
-    scanner.run(
-        tickers_file=args.tickers,
-        output_dir=args.output_dir,
-        days=args.days,
-        threshold=args.threshold
-    )
+    p=argparse.ArgumentParser(); p.add_argument('--tickers',default='data/tickers_5000.csv')
+    p.add_argument('--output-dir',default='data/output'); p.add_argument('--days',type=int,default=120)
+    p.add_argument('--threshold',type=float,default=50); a=p.parse_args()
+    FullStockScanner().run(a.tickers,a.output_dir,a.days,a.threshold)
