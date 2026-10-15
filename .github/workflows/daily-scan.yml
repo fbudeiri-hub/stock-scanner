@@ -1,100 +1,24 @@
-name: Daily Stock Scanner - Two-Tier Strategy
-
+name: Scanner validation - no automatic market scans
 on:
-  schedule:
-    # TIER 1: Full scan 8:30 AM ET (1:30 PM UTC)
-    - cron: '30 13 * * 1-5'
-    # TIER 1: Full scan 4:00 PM ET (9:00 PM UTC)
-    - cron: '0 21 * * 1-5'
-    
-    # TIER 2: Intraday hourly scans (10 AM - 4 PM ET)
-    - cron: '0 14,15,16,17,18,19,20,21 * * 1-5'
-  
+  push:
+    branches: [repair/scanner-data-integrity-20261015]
+  pull_request:
   workflow_dispatch:
-
+permissions:
+  contents: read
 jobs:
-  tier1_full_scan:
-    name: Tier 1 - Full Scan (All 5000 stocks)
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run TIER 1 Full Scan
-        env:
-          POLYGON_KEY: ${{ secrets.POLYGON_KEY }}
-          TWELVE_DATA_KEY: ${{ secrets.TWELVE_DATA_KEY }}
-        run: |
-          python -m src.analysis.scanner_full \
-            --tickers data/tickers_5000.csv \
-            --output-dir data/output \
-            --days 30 \
-            --threshold 50
-
-      - name: Commit and push results
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add -A
-          git commit -m "Tier 1 Scan: $(date +'%Y-%m-%d %H:%M UTC') - Full 5000 stock analysis" || true
-          git push
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+          python-version: '3.11'
+      - run: python -m pip install -r requirements-test.txt
+      - run: python -m pytest tests/ --junitxml=test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: tier1-full-scan-${{ github.run_id }}
-          path: data/output/full_scan_*.csv
-          retention-days: 30
-
-  tier2_focus_scan:
-    name: Tier 2 - Focus Scan (Top 100 momentum)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: tier1_full_scan
-    if: success()
-    
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run TIER 2 Focus Scan
-        env:
-          POLYGON_KEY: ${{ secrets.POLYGON_KEY }}
-          TWELVE_DATA_KEY: ${{ secrets.TWELVE_DATA_KEY }}
-        run: |
-          python -m src.analysis.scanner_momentum_focus \
-            --watchlist data/output/watchlist_top100.txt \
-            --output-dir data/output \
-            --days 5 \
-            --threshold 40
-
-      - name: Commit and push results
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add -A
-          git commit -m "Tier 2 Scan: $(date +'%Y-%m-%d %H:%M UTC') - Top 100 momentum update" || true
-          git push
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: tier2-focus-scan-${{ github.run_id }}
-          path: data/output/focus_scan_*.csv
-          retention-days: 30
+          name: offline-scanner-tests
+          path: test-results.xml
